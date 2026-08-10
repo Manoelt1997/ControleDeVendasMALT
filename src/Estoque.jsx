@@ -26,6 +26,65 @@ function mesLabel(d) {
   return `${nomes[Number(mes) - 1]}/${ano.slice(2)}`;
 }
 
+const NOMES_MES_COMPLETO = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function ymd(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function ultimoDiaMes(y, m) {
+  return new Date(y, m + 1, 0).getDate();
+}
+
+// Calcula a data de início e fim (inclusive) do período escolhido no filtro.
+function intervaloPeriodo(filtro, mesPersonalizado) {
+  const agora = new Date();
+  const anoAtual = agora.getFullYear();
+  const mesAtual = agora.getMonth(); // 0-indexado
+
+  if (filtro === "mes_atual") {
+    return { inicio: ymd(anoAtual, mesAtual, 1), fim: ymd(anoAtual, mesAtual, ultimoDiaMes(anoAtual, mesAtual)) };
+  }
+  if (filtro === "mes_passado") {
+    let y = anoAtual, m = mesAtual - 1;
+    if (m < 0) { m = 11; y -= 1; }
+    return { inicio: ymd(y, m, 1), fim: ymd(y, m, ultimoDiaMes(y, m)) };
+  }
+  if (filtro === "3meses") {
+    let y = anoAtual, m = mesAtual - 2;
+    while (m < 0) { m += 12; y -= 1; }
+    return { inicio: ymd(y, m, 1), fim: ymd(anoAtual, mesAtual, ultimoDiaMes(anoAtual, mesAtual)) };
+  }
+  if (filtro === "ano_atual") {
+    return { inicio: `${anoAtual}-01-01`, fim: `${anoAtual}-12-31` };
+  }
+  if (filtro === "personalizado" && mesPersonalizado) {
+    const [y, m] = mesPersonalizado.split("-").map(Number);
+    return { inicio: ymd(y, m - 1, 1), fim: ymd(y, m - 1, ultimoDiaMes(y, m - 1)) };
+  }
+  return { inicio: "0000-01-01", fim: "9999-12-31" }; // "tudo"
+}
+
+function labelPeriodo(filtro, mesPersonalizado) {
+  const agora = new Date();
+  if (filtro === "mes_atual") return `${NOMES_MES_COMPLETO[agora.getMonth()]} de ${agora.getFullYear()}`;
+  if (filtro === "mes_passado") {
+    let m = agora.getMonth() - 1, y = agora.getFullYear();
+    if (m < 0) { m = 11; y -= 1; }
+    return `${NOMES_MES_COMPLETO[m]} de ${y}`;
+  }
+  if (filtro === "3meses") return "últimos 3 meses";
+  if (filtro === "ano_atual") return `ano de ${agora.getFullYear()}`;
+  if (filtro === "personalizado" && mesPersonalizado) {
+    const [y, m] = mesPersonalizado.split("-").map(Number);
+    return `${NOMES_MES_COMPLETO[m - 1]} de ${y}`;
+  }
+  return "todo o período";
+}
+
 // ---------- Conversão linha (snake_case) <-> objeto do app (camelCase) ----------
 function linhaParaAparelho(l) {
   return {
@@ -115,6 +174,10 @@ export default function Estoque() {
   const [dataConclusao, setDataConclusao] = useState(hoje());
   const [valorCobradoFinal, setValorCobradoFinal] = useState("");
   const [salvandoConclusao, setSalvandoConclusao] = useState(false);
+
+  // filtro de período do dashboard (histórico de vendas e serviços)
+  const [filtroPeriodo, setFiltroPeriodo] = useState("mes_atual");
+  const [mesPersonalizado, setMesPersonalizado] = useState(hoje().slice(0, 7));
 
   useEffect(() => {
     let ativo = true;
@@ -213,8 +276,6 @@ export default function Estoque() {
   );
 
   const totalInvestidoEstoque = emEstoque.reduce((s, a) => s + custoTotalAparelho(a), 0);
-  const totalLucroVendas = vendidos.reduce((s, a) => s + (a.valorVenda - custoTotalAparelho(a)), 0);
-  const totalVendidoValor = vendidos.reduce((s, a) => s + (a.valorVenda || 0), 0);
 
   const servicosEmAndamento = useMemo(
     () => servicos.filter((s) => s.status !== "concluido").sort((a, b) => (b.dataEntrada || "").localeCompare(a.dataEntrada || "")),
@@ -225,9 +286,27 @@ export default function Estoque() {
     [servicos]
   );
   const totalAReceberServicos = servicosEmAndamento.reduce((s, srv) => s + (srv.valorCobrado || 0), 0);
-  const totalLucroServicos = servicosConcluidos.reduce((s, srv) => s + (lucroServico(srv) || 0), 0);
 
-  // ---------- Vendas agrupadas por mês, para o gráfico ----------
+  // ---------- Filtro de período (afeta resumo financeiro e históricos) ----------
+  const { inicio: inicioPeriodo, fim: fimPeriodo } = useMemo(
+    () => intervaloPeriodo(filtroPeriodo, mesPersonalizado),
+    [filtroPeriodo, mesPersonalizado]
+  );
+
+  const vendidosPeriodo = useMemo(
+    () => vendidos.filter((a) => a.dataSaida && a.dataSaida >= inicioPeriodo && a.dataSaida <= fimPeriodo),
+    [vendidos, inicioPeriodo, fimPeriodo]
+  );
+  const servicosConcluidosPeriodo = useMemo(
+    () => servicosConcluidos.filter((s) => s.dataConclusao && s.dataConclusao >= inicioPeriodo && s.dataConclusao <= fimPeriodo),
+    [servicosConcluidos, inicioPeriodo, fimPeriodo]
+  );
+
+  const totalLucroVendas = vendidosPeriodo.reduce((s, a) => s + (a.valorVenda - custoTotalAparelho(a)), 0);
+  const totalVendidoValor = vendidosPeriodo.reduce((s, a) => s + (a.valorVenda || 0), 0);
+  const totalLucroServicos = servicosConcluidosPeriodo.reduce((s, srv) => s + (lucroServico(srv) || 0), 0);
+
+  // ---------- Vendas agrupadas por mês, para o gráfico (sempre mostra tudo, não filtra por período) ----------
   const vendasPorMes = useMemo(() => {
     const mapa = new Map();
     for (const a of vendidos) {
@@ -386,8 +465,53 @@ export default function Estoque() {
         </div>
       )}
 
+      {/* FILTRO DE PERÍODO */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
+        <span className="mono" style={{ fontSize: 11, color: "#5A626B", marginRight: 4 }}>PERÍODO:</span>
+        {[
+          { valor: "mes_atual", rotulo: "Este mês" },
+          { valor: "mes_passado", rotulo: "Mês passado" },
+          { valor: "3meses", rotulo: "Últimos 3 meses" },
+          { valor: "ano_atual", rotulo: "Este ano" },
+          { valor: "tudo", rotulo: "Tudo" },
+          { valor: "personalizado", rotulo: "Escolher mês" },
+        ].map((op) => (
+          <button
+            key={op.valor}
+            onClick={() => setFiltroPeriodo(op.valor)}
+            className="mono"
+            style={{
+              background: filtroPeriodo === op.valor ? "#4FB8A622" : "transparent",
+              border: `1px solid ${filtroPeriodo === op.valor ? "#4FB8A6" : "#2C3138"}`,
+              color: filtroPeriodo === op.valor ? "#4FB8A6" : "#8A939D",
+              borderRadius: 6,
+              padding: "6px 12px",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            {op.rotulo}
+          </button>
+        ))}
+        {filtroPeriodo === "personalizado" && (
+          <input
+            type="month"
+            value={mesPersonalizado}
+            onChange={(e) => setMesPersonalizado(e.target.value)}
+            style={{
+              background: "#1E2228",
+              border: "1px solid #2C3138",
+              color: "#E4E7EB",
+              borderRadius: 6,
+              padding: "6px 10px",
+              fontSize: 12.5,
+            }}
+          />
+        )}
+      </div>
+
       {/* RESUMO */}
-      <div className="grid-3-18" style={{ marginBottom: 28 }}>
+      <div className="grid-3-18" style={{ marginBottom: 8 }}>
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
           <div style={{ fontSize: 12, color: "#8A939D" }}>Em estoque agora</div>
           <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{emEstoque.length} aparelho{emEstoque.length === 1 ? "" : "s"}</div>
@@ -395,14 +519,17 @@ export default function Estoque() {
         </div>
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
           <div style={{ fontSize: 12, color: "#8A939D" }}>Vendidos</div>
-          <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{vendidos.length}</div>
+          <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{vendidosPeriodo.length}</div>
           <div style={{ fontSize: 12, color: "#5A626B", marginTop: 2 }}>{moeda(totalVendidoValor)} em vendas</div>
         </div>
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
-          <div style={{ fontSize: 12, color: "#8A939D" }}>Lucro total (vendas)</div>
+          <div style={{ fontSize: 12, color: "#8A939D" }}>Lucro em vendas</div>
           <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "#4FB8A6" }}>{moeda(totalLucroVendas)}</div>
           <div style={{ fontSize: 12, color: "#5A626B", marginTop: 2 }}>compra + peças já descontados</div>
         </div>
+      </div>
+      <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 28 }}>
+        valores de vendas/serviços acima referentes a: {labelPeriodo(filtroPeriodo, mesPersonalizado)}
       </div>
 
       <div className="grid-2-16" style={{ marginBottom: 28 }}>
@@ -414,7 +541,7 @@ export default function Estoque() {
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
           <div style={{ fontSize: 12, color: "#8A939D" }}>Lucro em serviços concluídos</div>
           <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "#4FB8A6" }}>{moeda(totalLucroServicos)}</div>
-          <div style={{ fontSize: 12, color: "#5A626B", marginTop: 2 }}>{servicosConcluidos.length} concluído{servicosConcluidos.length === 1 ? "" : "s"} · valor cobrado − peças</div>
+          <div style={{ fontSize: 12, color: "#5A626B", marginTop: 2 }}>{servicosConcluidosPeriodo.length} concluído{servicosConcluidosPeriodo.length === 1 ? "" : "s"} no período · valor cobrado − peças</div>
         </div>
       </div>
 
@@ -799,15 +926,15 @@ export default function Estoque() {
       {/* HISTÓRICO DE SERVIÇOS CONCLUÍDOS */}
       <div style={{ marginTop: 32 }}>
         <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 10 }}>
-          HISTÓRICO DE SERVIÇOS ({servicosConcluidos.length})
+          HISTÓRICO DE SERVIÇOS ({servicosConcluidosPeriodo.length}) — {labelPeriodo(filtroPeriodo, mesPersonalizado)}
         </div>
-        {servicosConcluidos.length === 0 ? (
+        {servicosConcluidosPeriodo.length === 0 ? (
           <div style={{ border: "1px dashed #2C3138", borderRadius: 10, padding: 22, textAlign: "center", color: "#5A626B", fontSize: 13 }}>
-            Nenhum serviço concluído ainda.
+            Nenhum serviço concluído em {labelPeriodo(filtroPeriodo, mesPersonalizado)}.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {servicosConcluidos.map((s) => {
+            {servicosConcluidosPeriodo.map((s) => {
               const custoPecas = custoPecasServico(s);
               const lucro = lucroServico(s) || 0;
               return (
@@ -848,7 +975,7 @@ export default function Estoque() {
       {/* GRÁFICO DE VENDAS */}
       <div style={{ marginTop: 32 }}>
         <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 10 }}>
-          VENDAS AO LONGO DO TEMPO
+          VENDAS AO LONGO DO TEMPO <span style={{ color: "#3A4048" }}>(histórico completo, não segue o filtro de período)</span>
         </div>
         {vendasPorMes.length === 0 ? (
           <div style={{ border: "1px dashed #2C3138", borderRadius: 10, padding: 22, textAlign: "center", color: "#5A626B", fontSize: 13 }}>
@@ -880,15 +1007,15 @@ export default function Estoque() {
       {/* HISTÓRICO DE VENDAS */}
       <div style={{ marginTop: 32 }}>
         <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 10 }}>
-          HISTÓRICO DE VENDAS ({vendidos.length})
+          HISTÓRICO DE VENDAS ({vendidosPeriodo.length}) — {labelPeriodo(filtroPeriodo, mesPersonalizado)}
         </div>
-        {vendidos.length === 0 ? (
+        {vendidosPeriodo.length === 0 ? (
           <div style={{ border: "1px dashed #2C3138", borderRadius: 10, padding: 22, textAlign: "center", color: "#5A626B", fontSize: 13 }}>
-            Nenhuma venda registrada ainda.
+            Nenhuma venda registrada em {labelPeriodo(filtroPeriodo, mesPersonalizado)}.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {vendidos.map((a) => {
+            {vendidosPeriodo.map((a) => {
               const custo = custoTotalAparelho(a);
               const lucro = (a.valorVenda || 0) - custo;
               return (
