@@ -85,11 +85,25 @@ export function labelPeriodo(filtro, mesPersonalizado) {
 }
 
 // ---------- Conversão linha (snake_case) <-> objeto do app (camelCase) ----------
+export const CATEGORIAS_PRODUTO = [
+  { chave: "celular", rotulo: "Celular" },
+  { chave: "acessorio", rotulo: "Acessório" },
+  { chave: "notebook", rotulo: "Notebook / PC" },
+  { chave: "videogame", rotulo: "Videogame" },
+  { chave: "tablet", rotulo: "Tablet" },
+  { chave: "outro", rotulo: "Outro eletrônico" },
+];
+
+export function rotuloCategoriaProduto(chave) {
+  return CATEGORIAS_PRODUTO.find((c) => c.chave === chave)?.rotulo || chave;
+}
+
 export function linhaParaAparelho(l) {
   return {
     id: l.id,
     modelo: l.modelo,
     marca: l.marca,
+    categoria: l.categoria || "celular",
     dataEntrada: l.data_entrada,
     valorCompra: Number(l.valor_compra) || 0,
     observacao: l.observacao,

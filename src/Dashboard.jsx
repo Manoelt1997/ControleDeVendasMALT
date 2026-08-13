@@ -207,7 +207,7 @@ export default function Dashboard() {
         </div>
       </div>
       <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 28 }}>
-        {vendidos.length} aparelho{vendidos.length === 1 ? "" : "s"} vendido{vendidos.length === 1 ? "" : "s"} · {servicosConcluidos.length} serviço{servicosConcluidos.length === 1 ? "" : "s"} concluído{servicosConcluidos.length === 1 ? "" : "s"} · histórico completo
+        {vendidos.length} produto{vendidos.length === 1 ? "" : "s"} vendido{vendidos.length === 1 ? "" : "s"} · {servicosConcluidos.length} serviço{servicosConcluidos.length === 1 ? "" : "s"} concluído{servicosConcluidos.length === 1 ? "" : "s"} · histórico completo
       </div>
 
       {/* SELETOR DE GRANULARIDADE */}
@@ -259,7 +259,7 @@ export default function Dashboard() {
       <div className="grid-main">
         <div>
           <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 10 }}>
-            MODELOS MAIS VENDIDOS
+            PRODUTOS MAIS VENDIDOS
           </div>
           {rankingVendidos.length === 0 ? (
             <div style={{ border: "1px dashed #2C3138", borderRadius: 10, padding: 22, textAlign: "center", color: "#5A626B", fontSize: 13 }}>

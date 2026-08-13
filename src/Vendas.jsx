@@ -77,8 +77,8 @@ export default function Vendas() {
     <div>
       <h2 className="display" style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Vendas</h2>
       <p style={{ color: "#8A939D", fontSize: 13.5, margin: "0 0 24px", maxWidth: 640 }}>
-        Histórico de aparelhos vendidos, com lucro calculado (venda − compra − peças).
-        Para dar baixa em um aparelho, use a tela de Estoque.
+        Histórico de produtos vendidos, com lucro calculado (venda − compra − peças).
+        Para dar baixa em um produto, use a tela de Estoque.
       </p>
 
       {erro && (
@@ -146,7 +146,7 @@ export default function Vendas() {
       {rankingModelos.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <div className="mono" style={{ fontSize: 11, color: "#5A626B", marginBottom: 10 }}>
-            MODELOS MAIS VENDIDOS <span style={{ color: "#3A4048" }}>(histórico completo)</span>
+            PRODUTOS MAIS VENDIDOS <span style={{ color: "#3A4048" }}>(histórico completo)</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {rankingModelos.map((r, i) => (

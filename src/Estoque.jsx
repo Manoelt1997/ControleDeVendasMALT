@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
 import { supabase } from "./supabaseClient";
-import { TABELA_APARELHOS, TABELA_PECAS, moeda, hoje, dataBR } from "./estoqueHelpers";
+import { TABELA_APARELHOS, TABELA_PECAS, moeda, hoje, dataBR, CATEGORIAS_PRODUTO, rotuloCategoriaProduto } from "./estoqueHelpers";
 import { useEstoqueData } from "./useEstoqueData";
 
 export default function Estoque() {
   const { carregando, erro, setErro, aparelhos, pecas } = useEstoqueData();
 
-  // form: novo aparelho
+  // form: novo produto
+  const [categoria, setCategoria] = useState("celular");
   const [modelo, setModelo] = useState("");
   const [marca, setMarca] = useState("");
   const [dataEntrada, setDataEntrada] = useState(hoje());
@@ -50,6 +51,7 @@ export default function Estoque() {
     const { error } = await supabase.from(TABELA_APARELHOS).insert({
       modelo: modelo.trim(),
       marca: marca.trim() || null,
+      categoria,
       data_entrada: dataEntrada,
       valor_compra: Number(valorCompra) || 0,
       observacao: observacao.trim() || null,
@@ -60,6 +62,7 @@ export default function Estoque() {
     setErro(false);
     setModelo("");
     setMarca("");
+    setCategoria("celular");
     setValorCompra("");
     setObservacao("");
     setDataEntrada(hoje());
@@ -129,8 +132,9 @@ export default function Estoque() {
     <div>
       <h2 className="display" style={{ fontSize: 22, fontWeight: 700, margin: "0 0 4px" }}>Estoque</h2>
       <p style={{ color: "#8A939D", fontSize: 13.5, margin: "0 0 24px", maxWidth: 640 }}>
-        Aparelhos comprados para revender e as peças usadas neles. Registre a entrada, acompanhe
-        o custo total e dê baixa quando vender.
+        Produtos comprados para revender — celulares, acessórios, notebooks, videogames e outros
+        eletrônicos — e as peças usadas neles. Registre a entrada, acompanhe o custo total e dê
+        baixa quando vender.
       </p>
 
       {erro && (
@@ -143,7 +147,7 @@ export default function Estoque() {
       <div className="grid-2-16" style={{ marginBottom: 28 }}>
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
           <div style={{ fontSize: 12, color: "#8A939D" }}>Em estoque agora</div>
-          <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{emEstoque.length} aparelho{emEstoque.length === 1 ? "" : "s"}</div>
+          <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{emEstoque.length} produto{emEstoque.length === 1 ? "" : "s"}</div>
         </div>
         <div style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 10, padding: "14px 18px" }}>
           <div style={{ fontSize: 12, color: "#8A939D" }}>Total investido</div>
@@ -155,11 +159,19 @@ export default function Estoque() {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ background: "#1E2228", border: "1px dashed #3A4048", borderRadius: 10, padding: 22, position: "relative" }}>
             <div className="mono" style={{ position: "absolute", top: -10, left: 20, background: "#14171A", padding: "0 8px", fontSize: 11, color: "#5A626B" }}>
-              ENTRADA DE APARELHO
+              ENTRADA DE PRODUTO
             </div>
             <div className="field">
-              <label>Modelo</label>
-              <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="Ex: iPhone 12 64GB" />
+              <label>Categoria</label>
+              <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                {CATEGORIAS_PRODUTO.map((c) => (
+                  <option key={c.chave} value={c.chave}>{c.rotulo}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Produto</label>
+              <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="Ex: iPhone 12 64GB, Capa Galaxy A54, Fonte notebook 65W" />
             </div>
             <div className="grid-2">
               <div className="field">
@@ -173,7 +185,7 @@ export default function Estoque() {
             </div>
             <div className="grid-2">
               <div className="field">
-                <label>Valor pago no aparelho</label>
+                <label>Valor pago no produto</label>
                 <input type="number" inputMode="decimal" value={valorCompra} onChange={(e) => setValorCompra(e.target.value)} placeholder="0,00" />
               </div>
               <div className="field">
@@ -220,7 +232,7 @@ export default function Estoque() {
               </div>
             </div>
             <div className="field">
-              <label>Vincular a um aparelho (opcional)</label>
+              <label>Vincular a um produto (opcional)</label>
               <select value={aparelhoPecaId} onChange={(e) => setAparelhoPecaId(e.target.value)}>
                 <option value="">Nenhum / estoque de peças avulso</option>
                 {aparelhos.map((a) => (
@@ -263,7 +275,12 @@ export default function Estoque() {
                   <div key={a.id} style={{ background: "#1E2228", border: "1px solid #2C3138", borderRadius: 8, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{a.modelo}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>
+                          {a.modelo}{" "}
+                          <span className="mono" style={{ fontSize: 9.5, color: "#8A939D", border: "1px solid #2C3138", borderRadius: 4, padding: "1px 6px" }}>
+                            {rotuloCategoriaProduto(a.categoria)}
+                          </span>
+                        </div>
                         <div style={{ color: "#8A939D", fontSize: 12 }}>
                           {a.marca ? `${a.marca} · ` : ""}entrada {dataBR(a.dataEntrada)}
                           {a.observacao ? ` · ${a.observacao}` : ""}
