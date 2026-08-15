@@ -22,6 +22,12 @@ export default function Cotacao() {
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
 
+  // edição de custo de compra / margem mínima (inline, por cotação)
+  const [custoEditId, setCustoEditId] = useState(null);
+  const [custoEditValor, setCustoEditValor] = useState("");
+  const [custoEditMargem, setCustoEditMargem] = useState("20");
+  const [salvandoCusto, setSalvandoCusto] = useState(false);
+
   useEffect(() => {
     let ativo = true;
 
@@ -71,6 +77,64 @@ export default function Cotacao() {
       qtd: precos.length,
       porPlataforma,
     };
+  }
+
+  // Compara o que você pagaria (valorCompra) com o que o mercado pesquisado está cobrando,
+  // e devolve a faixa de revenda: do mínimo (ainda com a margem mínima garantida) ao máximo
+  // (o maior preço real visto na pesquisa — acima disso você provavelmente não vende rápido).
+  function analiseRevenda(cotacao, stats) {
+    if (!cotacao.valorCompra || stats.qtd === 0) return null;
+    const custo = cotacao.valorCompra;
+    const margem = cotacao.margemMinima ?? 20;
+    const precoMinimoComMargem = custo * (1 + margem / 100);
+    // O mínimo pra vender é o maior entre "cobrir a margem mínima" e "o menor preço visto no
+    // mercado" — não adianta ter margem se ninguém paga isso; e não adianta seguir o mercado
+    // se isso te dá prejuízo.
+    const precoMinimoRevenda = Math.max(precoMinimoComMargem, 0);
+    const precoMaximoRevenda = stats.max;
+    const lucroMedia = stats.mediaGeral - custo;
+    const lucroMinimo = precoMinimoRevenda - custo;
+    const lucroMaximo = precoMaximoRevenda - custo;
+    const margemMedia = custo > 0 ? (lucroMedia / custo) * 100 : 0;
+
+    let veredito, corVeredito;
+    if (stats.mediaGeral <= custo) {
+      veredito = "Não compensa — a média do mercado está abaixo do que você pagaria.";
+      corVeredito = "#D9683D";
+    } else if (precoMinimoRevenda > precoMaximoRevenda) {
+      veredito = "Margem apertada — o preço mínimo pra cobrir sua margem ficou acima do maior preço visto no mercado.";
+      corVeredito = "#D9A63D";
+    } else if (margemMedia < margem) {
+      veredito = "Compensa, mas com margem abaixo do que você definiu como mínima.";
+      corVeredito = "#D9A63D";
+    } else {
+      veredito = "Vale a pena — dá pra vender dentro da margem que você quer.";
+      corVeredito = "#4FB8A6";
+    }
+
+    return { custo, precoMinimoRevenda, precoMaximoRevenda, lucroMedia, lucroMinimo, lucroMaximo, margemMedia, veredito, corVeredito };
+  }
+
+  function abrirEdicaoCusto(cotacao) {
+    setCustoEditId(cotacao.id);
+    setCustoEditValor(cotacao.valorCompra !== null ? String(cotacao.valorCompra) : "");
+    setCustoEditMargem(String(cotacao.margemMinima ?? 20));
+  }
+
+  async function salvarCusto(cotacao) {
+    setSalvandoCusto(true);
+    const { error } = await supabase
+      .from(TABELA_COTACOES)
+      .update({
+        valor_compra: custoEditValor !== "" ? Number(custoEditValor) : null,
+        margem_minima: custoEditMargem !== "" ? Number(custoEditMargem) : 20,
+        atualizado_em: new Date().toISOString(),
+      })
+      .eq("id", cotacao.id);
+    setSalvandoCusto(false);
+    if (error) { setErro(true); return; }
+    setErro(false);
+    setCustoEditId(null);
   }
 
   async function criarCotacao() {
@@ -228,6 +292,90 @@ export default function Cotacao() {
                     ))}
                   </div>
                 )}
+
+                {/* CUSTO DE COMPRA + ANÁLISE DE REVENDA */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #2C3138" }}>
+                  {custoEditId === c.id ? (
+                    <div>
+                      <div className="grid-2">
+                        <div className="field" style={{ marginBottom: 8 }}>
+                          <label>Preço que você encontrou pra comprar</label>
+                          <input type="number" inputMode="decimal" value={custoEditValor} onChange={(e) => setCustoEditValor(e.target.value)} placeholder="0,00" />
+                        </div>
+                        <div className="field" style={{ marginBottom: 8 }}>
+                          <label>Margem mínima desejada (%)</label>
+                          <input type="number" inputMode="decimal" value={custoEditMargem} onChange={(e) => setCustoEditMargem(e.target.value)} placeholder="20" />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => salvarCusto(c)}
+                          disabled={salvandoCusto}
+                          className="mono"
+                          style={{ background: "#4FB8A6", color: "#14171A", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", opacity: salvandoCusto ? 0.5 : 1 }}
+                        >
+                          {salvandoCusto ? "Salvando..." : "Salvar"}
+                        </button>
+                        <button
+                          onClick={() => setCustoEditId(null)}
+                          style={{ background: "none", border: "1px solid #2C3138", color: "#8A939D", borderRadius: 6, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : c.valorCompra ? (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                        <div style={{ fontSize: 12.5, color: "#8A939D" }}>
+                          Comprando por <span className="mono" style={{ color: "#EDEFF1", fontWeight: 600 }}>{moeda(c.valorCompra)}</span>
+                          <span style={{ color: "#5A626B" }}> · margem mínima {c.margemMinima}%</span>
+                        </div>
+                        <button
+                          onClick={() => abrirEdicaoCusto(c)}
+                          className="mono"
+                          style={{ background: "none", border: "none", color: "#4FB8A6", fontSize: 11.5, cursor: "pointer", padding: 0 }}
+                        >
+                          editar
+                        </button>
+                      </div>
+
+                      {stats.qtd > 0 && (() => {
+                        const analise = analiseRevenda(c, stats);
+                        return (
+                          <div style={{ background: "#14171A", border: "1px solid #2C3138", borderRadius: 8, padding: "12px 14px" }}>
+                            <div className="grid-2" style={{ marginBottom: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 10.5, color: "#5A626B" }}>Revenda mínima</div>
+                                <div className="mono" style={{ fontSize: 15, fontWeight: 600 }}>{moeda(analise.precoMinimoRevenda)}</div>
+                                <div style={{ fontSize: 10, color: "#5A626B" }}>lucro {moeda(analise.lucroMinimo)}</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10.5, color: "#5A626B" }}>Revenda máxima</div>
+                                <div className="mono" style={{ fontSize: 15, fontWeight: 600 }}>{moeda(analise.precoMaximoRevenda)}</div>
+                                <div style={{ fontSize: 10, color: "#5A626B" }}>lucro {moeda(analise.lucroMaximo)}</div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: "#8A939D", marginBottom: 8 }}>
+                              Vendendo pela média (<span className="mono">{moeda(stats.mediaGeral)}</span>): lucro de{" "}
+                              <span className="mono" style={{ color: analise.lucroMedia >= 0 ? "#4FB8A6" : "#D9683D" }}>{moeda(analise.lucroMedia)}</span>{" "}
+                              ({analise.margemMedia.toFixed(0)}% de margem)
+                            </div>
+                            <div style={{ fontSize: 11.5, color: analise.corVeredito, fontWeight: 600 }}>{analise.veredito}</div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => abrirEdicaoCusto(c)}
+                      className="mono"
+                      style={{ background: "transparent", color: "#8A939D", border: "1px dashed #2C3138", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer", width: "100%" }}
+                    >
+                      + Informar preço de compra pra analisar se compensa revender
+                    </button>
+                  )}
+                </div>
 
                 {c.itens.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
