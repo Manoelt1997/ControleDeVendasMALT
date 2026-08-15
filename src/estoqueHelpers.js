@@ -146,6 +146,7 @@ export function linhaParaServico(l) {
     senhaDesbloqueio: l.senha_desbloqueio,
     checklistEntrada: l.checklist_entrada || {},
     fotos: l.fotos || [],
+    telefone: l.telefone,
   };
 }
 
@@ -270,4 +271,95 @@ export function categoriasPorGranularidade(granularidade) {
   if (granularidade === "dia") return ultimosNDias(30);
   if (granularidade === "ano") return ultimosNAnos(5);
   return ultimosNMeses(12);
+}
+
+// ---------- WhatsApp (link direto wa.me, sem precisar de API/conta comercial) ----------
+
+// Aceita telefone digitado de qualquer jeito (com DDD, com/sem 9, com espaço,
+// parênteses, hífen) e devolve só os dígitos com o 55 do Brasil na frente,
+// formato que o wa.me exige.
+export function formatarTelefoneWhatsApp(telefone) {
+  const digitos = (telefone || "").replace(/\D/g, "");
+  if (!digitos) return "";
+  if (digitos.startsWith("55") && digitos.length >= 12) return digitos;
+  return `55${digitos}`;
+}
+
+// Monta o link que abre o WhatsApp (Web ou app, o navegador decide) já com a
+// mensagem pronta no campo de texto — falta só a pessoa clicar em enviar.
+export function linkWhatsApp(telefone, mensagem) {
+  const numero = formatarTelefoneWhatsApp(telefone);
+  const texto = encodeURIComponent(mensagem);
+  return numero ? `https://wa.me/${numero}?text=${texto}` : `https://wa.me/?text=${texto}`;
+}
+
+const MENSAGENS_POR_ETAPA = {
+  aguardando_avaliacao: (s) => `Recebemos seu ${s.aparelho} e ele está na fila de avaliação.`,
+  em_diagnostico: (s) => `Seu ${s.aparelho} está em diagnóstico. Assim que tivermos novidades, avisamos.`,
+  aguardando_aprovacao: (s) => `O orçamento do seu ${s.aparelho} já está pronto${s.valorCobrado ? ` (${moeda(s.valorCobrado)})` : ""}. Aguardando sua aprovação para seguir com o reparo.`,
+  aguardando_peca: (s) => `Seu ${s.aparelho} está aguardando a chegada de uma peça. Assim que ela chegar, damos continuidade.`,
+  em_manutencao: (s) => `Seu ${s.aparelho} está em manutenção neste momento.`,
+  pronto: (s) => `Boa notícia! Seu ${s.aparelho} já está pronto para retirada.`,
+  entregue: (s) => `Obrigado pela confiança! Seu ${s.aparelho} foi entregue. Qualquer coisa, estamos à disposição.`,
+  garantia: (s) => `Seu ${s.aparelho} está em atendimento de garantia.`,
+};
+
+// Mensagem de atualização de status, pronta pra mandar pro cliente conforme a etapa atual da OS.
+export function mensagemStatusOS(servico) {
+  const primeiroNome = servico.cliente ? servico.cliente.split(" ")[0] : "";
+  const abertura = `Olá${primeiroNome ? ", " + primeiroNome : ""}! Aqui é da MALT Manutenção.`;
+  const corpo = (MENSAGENS_POR_ETAPA[servico.status] || ((s) => `Atualização sobre o seu ${s.aparelho}: ${rotuloEtapa(s.status)}.`))(servico);
+  return `${abertura} ${corpo}`;
+}
+
+// Mensagem com o resumo do orçamento (peças + mão de obra + total), pra mandar junto
+// com o PDF (que precisa ser anexado manualmente — o wa.me não anexa arquivo sozinho).
+export function mensagemOrcamentoOS(servico, pecasVinculadas) {
+  const primeiroNome = servico.cliente ? servico.cliente.split(" ")[0] : "";
+  const custoPecas = pecasVinculadas.reduce((s, p) => s + p.valor, 0);
+  const maoDeObra = Math.max(0, (servico.valorCobrado || 0) - custoPecas);
+  const linhasPecas = pecasVinculadas.map((p) => `• ${p.nomePeca}: ${moeda(p.valor)}`).join("\n");
+  return (
+    `Olá${primeiroNome ? ", " + primeiroNome : ""}! Segue o orçamento do seu ${servico.aparelho}:\n\n` +
+    (linhasPecas ? `${linhasPecas}\n` : "") +
+    `• Mão de obra / serviço: ${moeda(maoDeObra)}\n\n` +
+    `*Total: ${moeda(servico.valorCobrado || 0)}*\n\n` +
+    `O PDF detalhado foi baixado agora — é só anexar aqui na conversa. Orçamento válido por 7 dias.`
+  );
+}
+
+// ---------- Cotação de mercado (Mercado Livre, Facebook Marketplace, OLX) ----------
+
+export const TABELA_COTACOES = "cotacoes_mercado";
+
+export const PLATAFORMAS = [
+  { chave: "mercado_livre", rotulo: "Mercado Livre", cor: "#D9A63D" },
+  { chave: "facebook", rotulo: "Facebook Marketplace", cor: "#5B8FD9" },
+  { chave: "olx", rotulo: "OLX", cor: "#8A67D9" },
+];
+
+export function rotuloPlataforma(chave) {
+  return PLATAFORMAS.find((p) => p.chave === chave)?.rotulo || chave;
+}
+export function corPlataforma(chave) {
+  return PLATAFORMAS.find((p) => p.chave === chave)?.cor || "#8A939D";
+}
+
+// Abre a busca do produto já pronta na plataforma escolhida, numa aba nova.
+export function linkBuscaPlataforma(plataforma, produto) {
+  const q = encodeURIComponent(produto);
+  if (plataforma === "mercado_livre") return `https://lista.mercadolivre.com.br/${q}`;
+  if (plataforma === "facebook") return `https://www.facebook.com/marketplace/search/?query=${q}`;
+  if (plataforma === "olx") return `https://www.olx.com.br/brasil?q=${q}`;
+  return "#";
+}
+
+export function linhaParaCotacao(l) {
+  return {
+    id: l.id,
+    produto: l.produto,
+    itens: (l.itens || []).map((it) => ({ ...it, preco: Number(it.preco) || 0 })),
+    criadoEm: l.criado_em,
+    atualizadoEm: l.atualizado_em,
+  };
 }

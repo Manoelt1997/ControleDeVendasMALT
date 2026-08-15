@@ -4,6 +4,7 @@ import {
   TABELA_PECAS, TABELA_SERVICOS, moeda, dataBR, hoje, intervaloPeriodo, labelPeriodo,
   BUCKET_FOTOS_OS, ETAPAS_OS, ETAPAS_CONCLUIDAS, rotuloEtapa, corEtapa,
   CATEGORIAS_OS, CHECKLIST_ITENS, ESTADOS_CHECKLIST,
+  linkWhatsApp, mensagemStatusOS, mensagemOrcamentoOS,
 } from "./estoqueHelpers";
 import { useEstoqueData } from "./useEstoqueData";
 import { gerarOrcamentoPDF } from "./gerarOrcamentoPDF";
@@ -69,6 +70,7 @@ export default function Servicos() {
 
   // form: nova OS
   const [clienteServico, setClienteServico] = useState("");
+  const [telefoneServico, setTelefoneServico] = useState("");
   const [categoriaServico, setCategoriaServico] = useState("celular");
   const [aparelhoServico, setAparelhoServico] = useState("");
   const [numeroSerieServico, setNumeroSerieServico] = useState("");
@@ -148,6 +150,7 @@ export default function Servicos() {
     setSalvandoServico(true);
     const { error } = await supabase.from(TABELA_SERVICOS).insert({
       cliente: clienteServico.trim(),
+      telefone: telefoneServico.trim() || null,
       categoria: categoriaServico,
       aparelho: aparelhoServico.trim(),
       numero_serie: numeroSerieServico.trim() || null,
@@ -165,6 +168,7 @@ export default function Servicos() {
     if (error) { setErro(true); return; }
     setErro(false);
     setClienteServico("");
+    setTelefoneServico("");
     setCategoriaServico("celular");
     setAparelhoServico("");
     setNumeroSerieServico("");
@@ -275,6 +279,17 @@ export default function Servicos() {
     }
   }
 
+  async function enviarOrcamentoWhatsApp(servico) {
+    await baixarOrcamento(servico);
+    const link = linkWhatsApp(servico.telefone, mensagemOrcamentoOS(servico, pecasDoServico(servico.id)));
+    window.open(link, "_blank");
+  }
+
+  function notificarStatusWhatsApp(servico) {
+    const link = linkWhatsApp(servico.telefone, mensagemStatusOS(servico));
+    window.open(link, "_blank");
+  }
+
   if (carregando) {
     return <div style={{ color: "#5A626B", fontSize: 13 }}>Carregando ordens de serviço...</div>;
   }
@@ -346,9 +361,14 @@ export default function Servicos() {
                 <input value={clienteServico} onChange={(e) => setClienteServico(e.target.value)} placeholder="Nome do cliente" />
               </div>
               <div className="field">
-                <label>Aparelho</label>
-                <input value={aparelhoServico} onChange={(e) => setAparelhoServico(e.target.value)} placeholder="Ex: Moto G54" />
+                <label>Telefone (WhatsApp)</label>
+                <input value={telefoneServico} onChange={(e) => setTelefoneServico(e.target.value)} placeholder="(47) 99999-9999" />
               </div>
+            </div>
+
+            <div className="field">
+              <label>Aparelho</label>
+              <input value={aparelhoServico} onChange={(e) => setAparelhoServico(e.target.value)} placeholder="Ex: Moto G54" />
             </div>
 
             <div className="grid-2">
@@ -495,7 +515,7 @@ export default function Servicos() {
                           {s.aparelho} <span style={{ color: "#8A939D", fontWeight: 400 }}>· {s.cliente}</span>
                         </div>
                         <div style={{ color: "#8A939D", fontSize: 12 }}>
-                          {categoriaRotulo} · entrada {dataBR(s.dataEntrada)}{s.numeroSerie ? ` · ${s.numeroSerie}` : ""}{s.cor ? ` · ${s.cor}` : ""}
+                          {categoriaRotulo} · entrada {dataBR(s.dataEntrada)}{s.numeroSerie ? ` · ${s.numeroSerie}` : ""}{s.cor ? ` · ${s.cor}` : ""}{s.telefone ? ` · ${s.telefone}` : ""}
                         </div>
                         {s.defeito && <div style={{ color: "#8A939D", fontSize: 12, marginTop: 2 }}>{s.defeito}</div>}
                         <TagsChecklist checklist={s.checklistEntrada} categoria={s.categoria} />
@@ -595,6 +615,24 @@ export default function Servicos() {
                             style={{ background: "transparent", color: "#4FB8A6", border: "1px solid #4FB8A6", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", opacity: gerandoPdfId === s.id ? 0.5 : 1 }}
                           >
                             {gerandoPdfId === s.id ? "Gerando..." : "Gerar orçamento (PDF)"}
+                          </button>
+                          <button
+                            onClick={() => enviarOrcamentoWhatsApp(s)}
+                            disabled={gerandoPdfId === s.id || !s.telefone}
+                            title={!s.telefone ? "Adicione o telefone do cliente na OS pra habilitar" : "Baixa o PDF e abre o WhatsApp com a mensagem pronta"}
+                            className="mono"
+                            style={{ background: "transparent", color: "#4FB8A6", border: "1px solid #4FB8A6", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", opacity: gerandoPdfId === s.id || !s.telefone ? 0.4 : 1 }}
+                          >
+                            Orçamento por WhatsApp
+                          </button>
+                          <button
+                            onClick={() => notificarStatusWhatsApp(s)}
+                            disabled={!s.telefone}
+                            title={!s.telefone ? "Adicione o telefone do cliente na OS pra habilitar" : "Abre o WhatsApp com a atualização de status pronta"}
+                            className="mono"
+                            style={{ background: "transparent", color: "#8A67D9", border: "1px solid #8A67D9", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", opacity: !s.telefone ? 0.4 : 1 }}
+                          >
+                            Notificar status
                           </button>
                           <button
                             onClick={() => removerServico(s.id)}
@@ -704,6 +742,15 @@ export default function Servicos() {
                       style={{ background: "transparent", color: "#4FB8A6", border: "1px solid #4FB8A6", borderRadius: 6, padding: "6px 10px", fontSize: 11.5, cursor: "pointer", opacity: gerandoPdfId === s.id ? 0.5 : 1 }}
                     >
                       PDF
+                    </button>
+                    <button
+                      onClick={() => notificarStatusWhatsApp(s)}
+                      disabled={!s.telefone}
+                      title={!s.telefone ? "Adicione o telefone do cliente na OS pra habilitar" : "Abre o WhatsApp com a atualização pronta"}
+                      className="mono"
+                      style={{ background: "transparent", color: "#8A67D9", border: "1px solid #8A67D9", borderRadius: 6, padding: "6px 10px", fontSize: 11.5, cursor: "pointer", opacity: !s.telefone ? 0.4 : 1 }}
+                    >
+                      WhatsApp
                     </button>
                     <button
                       onClick={() => removerServico(s.id)}

@@ -5,6 +5,7 @@ import Vendas from "./Vendas";
 import Estoque from "./Estoque";
 import Servicos from "./Servicos";
 import Calculadora from "./Calculadora";
+import Cotacao from "./Cotacao";
 import Dashboard from "./Dashboard";
 
 const TELAS = [
@@ -13,6 +14,7 @@ const TELAS = [
   { chave: "estoque", rotulo: "Estoque", Componente: Estoque },
   { chave: "servicos", rotulo: "Serviços", Componente: Servicos },
   { chave: "calculadora", rotulo: "Calculadora", Componente: Calculadora },
+  { chave: "cotacao", rotulo: "Cotação de Mercado", Componente: Cotacao },
 ];
 
 export default function App() {
