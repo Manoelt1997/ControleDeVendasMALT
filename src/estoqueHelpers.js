@@ -359,6 +359,8 @@ export function linhaParaCotacao(l) {
     id: l.id,
     produto: l.produto,
     itens: (l.itens || []).map((it) => ({ ...it, preco: Number(it.preco) || 0 })),
+    valorCompra: l.valor_compra !== null && l.valor_compra !== undefined ? Number(l.valor_compra) : null,
+    margemMinima: l.margem_minima !== null && l.margem_minima !== undefined ? Number(l.margem_minima) : 20,
     criadoEm: l.criado_em,
     atualizadoEm: l.atualizado_em,
   };
